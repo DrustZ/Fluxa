@@ -9,9 +9,10 @@
 
 typedef uint16_t line_t;
 
+
 // CONFIGURABLE STUFF ------------------------------------------------------
 
-#include "iswc.h" // Graphics data is contained in this header file.
+#include "test.h" // Graphics data is contained in this header file.
 
 Adafruit_LSM9DS0 lsm = Adafruit_LSM9DS0(1000);  // Use I2C, ID #1000
 
@@ -72,7 +73,7 @@ float lastz[3] = {0,0,0};
 float gs[3] = {0,0,0};
 float alpha = 0.8;
 
-float constantV = 0.5;
+float constantV = 1;
 uint8_t frameSkip = 0; 
 
 int brightness = 0;
@@ -84,7 +85,7 @@ void setup() {
   strip.clear();                // Make sure strip is clear
   strip.show();                 // before measuring battery
   strip.setBrightness(50);
-  brightness = 50;
+  brightness = 0;
   imageInit(); // Initialize pointers for default image
 
 #ifndef ESP8266
@@ -201,57 +202,6 @@ void calculateVelocity(){
   }
 }
 
-void assignLights(int imageLine, int mul){
-  uint8_t r,g,b;
-   switch (imageType) {
-    case PALETTE1: { // 1-bit (2 color) palette-based image
-        uint8_t  pixelNum = 0, byteNum, bitNum, pixels, idx,
-                 *ptr = (uint8_t *)&imagePixels[imageLine * NUM_LEDS / 8];
-        for (byteNum = NUM_LEDS / 8; byteNum--; ) { // Always padded to next byte, each byte has 8 pixels
-          pixels = pgm_read_byte(ptr++);  // 8 pixels of data (pixel 0 = LSB)
-          for (bitNum = 8; bitNum--; pixels >>= 1) {
-            idx = pixels & 1; // Color table index for pixel (0 or 1)
-            r = palette[idx][0], g = palette[idx][1], b = palette[idx][2];
-            r *= mul, g *= mul, b *= mul;
-            strip.setPixelColor(pixelNum++,
-                                r, g, b);
-          }
-        }
-
-        break;
-      }
-
-    case PALETTE4: { // 4-bit (16 color) palette-based image
-        uint8_t  pixelNum, p1, p2,
-                 *ptr = (uint8_t *)&imagePixels[imageLine * NUM_LEDS / 2];
-
-        for (pixelNum = 0; pixelNum < NUM_LEDS; ) {
-          p2  = pgm_read_byte(ptr++); // Data for two pixels...
-          p1  = p2 >> 4;              // Shift down 4 bits for first pixel
-          p2 &= 0x0F;                 // Mask out low 4 bits for second pixel
-          if (imageNumber != 20) {
-            r = palette[p1][0], g = palette[p1][1], b = palette[p1][2];
-            r *= mul, g *= mul, b *= mul;
-            strip.setPixelColor(pixelNum++,
-                                r, g, b);
-            r = palette[p2][0], g = palette[p2][1], b = palette[p2][2];
-            r *= mul, g *= mul, b *= mul;
-            strip.setPixelColor(pixelNum++,
-                                r, g, b);
-          } else {
-            strip.setPixelColor(pixelNum++,
-                                rand255(), rand255(), rand255());
-            strip.setPixelColor(pixelNum++,
-                                rand255(), rand255(), rand255());
-          }
-        }
-
-        break;
-      }
-  }
-  strip.show(); // Refresh LEDs
-}
-
 // MAIN LOOP ---------------------------------------------------------------
 
 void loop() {
@@ -293,6 +243,7 @@ void loop() {
     strip.clear();
   }
   uint32_t t = millis();               // Current time, milliseconds
+
   
   if (autoCycle) {
     if ((t - lastImageTime) >= (CYCLE_TIME * 1000L)) nextImage();
@@ -300,31 +251,57 @@ void loop() {
     // Keep this in mind when using auto-cycle mode, you may want to cull
     // the image selection to avoid unintentional regrettable combinations.
   }
-  
-  if (ct){
-    assignLights(imageLine-1, 0.5);
-    ct = 0;
+  switch (imageType) {
+
+    case PALETTE1: { // 1-bit (2 color) palette-based image
+        uint8_t  pixelNum = 0, byteNum, bitNum, pixels, idx,
+                 *ptr = (uint8_t *)&imagePixels[imageLine * NUM_LEDS / 8];
+        for (byteNum = NUM_LEDS / 8; byteNum--; ) { // Always padded to next byte, each byte has 8 pixels
+          pixels = pgm_read_byte(ptr++);  // 8 pixels of data (pixel 0 = LSB)
+          for (bitNum = 8; bitNum--; pixels >>= 1) {
+            idx = pixels & 1; // Color table index for pixel (0 or 1)
+            strip.setPixelColor(pixelNum++,
+                                palette[idx][0], palette[idx][1], palette[idx][2]);
+          }
+        }
+
+        break;
+      }
+
+    case PALETTE4: { // 4-bit (16 color) palette-based image
+        uint8_t  pixelNum, p1, p2,
+                 *ptr = (uint8_t *)&imagePixels[imageLine * NUM_LEDS / 2];
+
+        for (pixelNum = 0; pixelNum < NUM_LEDS; ) {
+          p2  = pgm_read_byte(ptr++); // Data for two pixels...
+          p1  = p2 >> 4;              // Shift down 4 bits for first pixel
+          p2 &= 0x0F;                 // Mask out low 4 bits for second pixel
+          if (imageNumber != 20) {
+            strip.setPixelColor(pixelNum++,
+                                palette[p1][0], palette[p1][1], palette[p1][2]);
+            strip.setPixelColor(pixelNum++,
+                                palette[p2][0], palette[p2][1], palette[p2][2]);
+          } else {
+            strip.setPixelColor(pixelNum++,
+                                rand255(), rand255(), rand255());
+            strip.setPixelColor(pixelNum++,
+                                rand255(), rand255(), rand255());
+          }
+        }
+
+        break;
+      }
+
   }
-  /*
-  if (v/constantV > 1.3){
-    uint8_t tmpl = imageLine+1 >= imageLines ? imageLines-1 : imageLine+1;
-    assignLights(tmpl, 0.5);
-    assignLights(imageLine, 1);
-    imageLine = tmpl;
-    ct = 1;
-    Serial.println("yes");
-  } else {
-    assignLights(imageLine, 1);
-    ct = 0;
-  }
-  // ct++; // time progress
-*/
-    assignLights(imageLine, 1);
+
+  strip.show(); // Refresh LEDs
+
+  ct++; // time progress
 
 #if !defined(LED_DATA_PIN) && !defined(LED_CLOCK_PIN)
   delayMicroseconds(900);  // Because hardware SPI is ludicrously fast
 #endif
-/*
+
   if (frameSkip <= 0){
     frameSkip = (int)(constantV/v);
     Serial.print("Skip:");Serial.println(frameSkip);
@@ -333,14 +310,14 @@ void loop() {
     frameSkip--;
     return;
   }
-*/
+
   if (gyro.gyro.z > 25 && flag == 1) {
     imageLine++;
-    if (imageLine >= imageLines) imageLine -= 1; // Next scanline, wrap around
+    if (imageLine == imageLines) imageLine = imageLines-1; // Next scanline, wrap around
   }
   if (gyro.gyro.z < -25 && flag == 0) {
     imageLine--;
-    if (imageLine <= -1) imageLine = 0;
+    if (imageLine == 0) imageLine = 1;
   }
 }
 
